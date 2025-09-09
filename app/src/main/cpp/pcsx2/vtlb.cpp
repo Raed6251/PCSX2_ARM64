@@ -854,11 +854,10 @@ void vtlb_Mirror(u32 new_region, u32 start, u32 size)
 
 __fi void* vtlb_GetPhyPtr(u32 paddr)
 {
-    auto pmap_value = vtlbdata.pmap[paddr >> VTLB_PAGE_BITS];
-    if (paddr >= VTLB_PMAP_SZ || pmap_value.isHandler())
-        return NULL;
-    else
-        return reinterpret_cast<void*>(pmap_value.assumePtr() + (paddr & VTLB_PAGE_MASK));
+	if (paddr >= VTLB_PMAP_SZ || vtlbdata.pmap[paddr >> VTLB_PAGE_BITS].isHandler())
+		return NULL;
+	else
+		return reinterpret_cast<void*>(vtlbdata.pmap[paddr >> VTLB_PAGE_BITS].assumePtr() + (paddr & VTLB_PAGE_MASK));
 }
 
 __fi u32 vtlb_V2P(u32 vaddr)
