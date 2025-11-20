@@ -349,12 +349,12 @@ void _psxMoveGPRtoR(const a64::Register& to, int fromgpr)
 	}
 }
 
-void _psxMoveGPRtoM(uptr to, int fromgpr)
+void _psxMoveGPRtoM(const a64::MemOperand& to, int fromgpr)
 {
 	if (PSX_IS_CONST1(fromgpr))
 	{
 //		xMOV(ptr32[(u32*)(to)], g_psxConstRegs[fromgpr]);
-        armStorePtr(g_psxConstRegs[fromgpr], (u32*)(to));
+        armStorePtr(g_psxConstRegs[fromgpr], to);
 	}
 	else
 	{
@@ -362,14 +362,14 @@ void _psxMoveGPRtoM(uptr to, int fromgpr)
 		if (reg >= 0)
 		{
 //			xMOV(ptr32[(u32*)(to)], xRegister32(reg));
-            armAsm->Str(a64::WRegister(reg), armMemOperandPtr((u32*)(to)));
+            armAsm->Str(a64::WRegister(reg), to);
 		}
 		else
 		{
 //			xMOV(eax, ptr[&psxRegs.GPR.r[fromgpr]]);
             armLoad(EAX, PTR_CPU(psxRegs.GPR.r[fromgpr]));
 //			xMOV(ptr32[(u32*)(to)], eax);
-            armAsm->Str(EAX, armMemOperandPtr((u32*)(to)));
+            armAsm->Str(EAX, to);
 		}
 	}
 }
@@ -942,7 +942,7 @@ void recResetIOP()
 	DevCon.WriteLn("iR3000A Recompiler reset.");
 
 //	xSetPtr(SysMemory::GetIOPRec());
-    armSetAsmPtr(recPtr, recPtrEnd - recPtr, nullptr);
+    armSetAsmPtr(SysMemory::GetIOPRec(), _4kb, nullptr);
     armStartBlock();
 
 	_DynGen_Dispatchers();
@@ -1110,7 +1110,7 @@ static __fi u32 psxRecClearMem(u32 pc)
 static __fi void recClearIOP(u32 Addr, u32 Size)
 {
 	u32 pc = Addr;
-	while (pc < Addr + Size * 4)
+	while (pc < Addr + (Size << 2)) // Size * 4
 		pc += PSXREC_CLEARM(pc);
 }
 
@@ -1125,14 +1125,16 @@ void psxSetBranchReg(u32 reg)
 		if (!swap)
 		{
 			const int wbreg = _allocX86reg(X86TYPE_PCWRITEBACK, 0, MODE_WRITE | MODE_CALLEESAVED);
-			_psxMoveGPRtoR(a64::WRegister(wbreg), reg);
+            auto reg32 = a64::WRegister(wbreg);
+
+			_psxMoveGPRtoR(reg32, reg);
 
 			psxRecompileNextInstruction(true, false);
 
 			if (x86regs[wbreg].inuse && x86regs[wbreg].type == X86TYPE_PCWRITEBACK)
 			{
 //				xMOV(ptr32[&psxRegs.pc], xRegister32(wbreg));
-                armStore(PTR_CPU(psxRegs.pc), a64::WRegister(wbreg));
+                armStore(PTR_CPU(psxRegs.pc), reg32);
 				x86regs[wbreg].inuse = 0;
 			}
 			else
@@ -1153,7 +1155,7 @@ void psxSetBranchReg(u32 reg)
 			}
 			else
 			{
-				_psxMoveGPRtoM((uptr)&psxRegs.pc, reg);
+				_psxMoveGPRtoM(PTR_CPU(psxRegs.pc), reg);
 			}
 		}
 	}
@@ -1173,6 +1175,7 @@ void psxSetBranchImm(u32 imm)
 	// end the current block
 //	xMOV(ptr32[&psxRegs.pc], imm);
     armStore(PTR_CPU(psxRegs.pc), imm);
+
 	_psxFlushCall(FLUSH_EVERYTHING);
 	iPsxBranchTest(imm, imm <= psxpc);
 
@@ -1469,7 +1472,7 @@ static void psxRecMemcheck(u32 op, u32 bits, bool store)
 //	xMOV(edx, ecx);
     armAsm->Mov(EDX, ECX);
 //	xADD(edx, bits / 8);
-    armAsm->Add(EDX, EDX, bits / 8);
+    armAsm->Add(EDX, EDX, bits >> 3); // bits / 8
 
 	// ecx = access address
 	// edx = access address+size
@@ -1706,7 +1709,7 @@ static void iopRecRecompile(const u32 startpc)
 	}
 
 //	xSetPtr(recPtr);
-    armSetAsmPtr(recPtr, recPtrEnd - recPtr, nullptr);
+    armSetAsmPtr(recPtr, _256kb, nullptr);
 //	recPtr = xGetAlignedCallTarget();
     recPtr = armStartBlock();
 
