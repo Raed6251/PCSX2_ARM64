@@ -1,0 +1,35 @@
+name: Build Android APKq9j
+
+on:
+  push:
+    branches: [ "master" ] # سيعمل التلقائي عند الدفع لفرع main
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-app-apk
+        # استخدم المسار الفعلي الذي وجدته هنا:
+        path: app/build/outputs/apk/debug/PCSX2_1_202512291219-debug.apk 
